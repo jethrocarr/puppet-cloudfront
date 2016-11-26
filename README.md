@@ -4,7 +4,7 @@ Provides a helper function that returns IP ranges being used by Amazon Web
 Services CloudFront.
 
 
-# cloudfront_ips
+# Function cloudfront_ips
 
 Returns a hash containing both IPv4 and IPv6 IP ranges used by Amazon CloudFront
 CDN. This is useful for crafting ACLs on webservers to block any requests
@@ -15,9 +15,16 @@ refreshes every 24 hours. If a refresh fails (eg network issue) it falls back to
 serving stale cache so there's no sudden change of configuration as long as the
 cache files remain on disk (generally in /tmp)
 
+
 ## Parameters & Output
 
-Returns a hash with both IPv4 and IPv6 ranges.
+Returns a hash with both IPv4 and IPv6 ranges, consisting of a set of strings in
+CIDR notation.
+
+Note that as of 2016-11-25, AWS does not yet use IPv6 for connectivity from
+CloudFront to origin, so the array of IPv6 addresses returned is empty. This may
+change at any time in future so if you have an IPv6 enabled server, recommend
+that you enable the functionality now.
 
 
 ## Usage Examples
@@ -29,67 +36,46 @@ ERB templates.
 
 ### Usage in Puppet Resources
 
-TODO: re-write example.
+This is an example of setting up an iptables/ip6tables firewall on a GNU/Linux
+server to only permit access to HTTPS (TCP 443) from CloudFront IP ranges. This
+makes it possible to have a locked down webserver that forces all requests
+through the CDN and blocking attacks directed at origin.
 
-This is an example of setting iptables rules that restrict traffic to SSH to
-New Zealand (APNIC/NZ) IPv6 addresses using the puppetlabs/firewall module
-with ip6tables provider for Linux:
-
-    # Use jethrocarr-rirs rir_allocations function to get an array of all IP
-    # addresses belonging to NZ IPv6 allocations and then create iptables
-    # rules for each of them accordingly.
+    # Use jethrocarr-cloudfront cloudfront_ips function to get an array of all
+    # IP addresses used by CloudFront and craft iptables rules to permit access
+    # from those IP ranges only. With a corresponding default block rule, this
+    # restricts access to this webserver to the CloudFront CDN only to prevent
+    # any users/attackers bypassing the CDN and hitting origin directly.
     #
     # Note we use a old style interation (pre future parser) to ensure
     # compatibility with Puppet 3 systems. In future when 4.x+ is standard we
     # could rewite with a newer loop approach as per:
     # https://docs.puppetlabs.com/puppet/latest/reference/lang_iteration.html
 
-    define s_firewall::ssh_ipv6 ($address = $title) {
-      firewall { "004 V6 Permit SSH ${address}":
-        provider => 'ip6tables',
+    define https_ipv4 ($address = $title) {
+      firewall { "100 V4 Permit HTTPS CloudFront ${address}":
+        provider => 'iptables',
         proto    => 'tcp',
-        port     => '22',
+        dport    => '443',
         source   => $address,
         action   => 'accept',
-      }  
+      }
     }
 
-    $ipv6_allocations = rir_allocations('apnic', 'ipv6', 'nz')
-    s_firewall::pre::ssh_ipv6 { $ipv6_allocations: }
+    define https_ipv6 ($address = $title) {
+      firewall { "100 V6 Permit HTTPS CloudFront ${address}":
+        provider => 'ip6tables',
+        proto    => 'tcp',
+        dport    => '443',
+        source   => $address,
+        action   => 'accept',
+      }
+    }
 
-Note that due to the use of Puppet 3 compatible iterator, you'll need to rename
-`s_firewall::ssh_ipv6` to `yourmodule::yourclass::ssh_ipv6` as the
-definition has to be a child of the module/class that it's inside of - in the
-above example, it lives in `s_firewall/manifests/init.pp`.
+    $cloudfront_allocations = cloudfront_ips()
 
-
-
-
-### Usage in Puppet ERB Templates
-
-TODO: re-write example
-
-If you want to provide the list of addresses to configuration files or scripts
-rather than using it to create Puppet resources, it's entirely possible to call
-the function directly from inside ERB templates. The following is an example of
-generating Apache `mod_access_compat` rules to restrict visitors from
-New Zealand (APNIC/NZ) IPv4 and IPv6 addresses only.
-
-    <Location "/admin">
-      Order deny,allow
-      Deny from all
-
-      # Use the jethrocarr-rirs Puppet module functions to lookup the IP
-      # allocations from APNIC for New Zealand. This works better than the
-      # buggy mod_geoip module since it supports both IPv4 and IPv6 concurrently.
-
-      <% scope.function_rir_allocations(['apnic', 'ipv4', 'nz']).each do |ipv4| -%>
-        Allow from <%= ipv4 %>
-      <% end -%>
-      <% scope.function_rir_allocations(['apnic', 'ipv6', 'nz']).each do |ipv6| -%>
-        Allow from <%= ipv6 %>
-      <% end -%>
-    </Location>
+    https_ipv4 { $cloudfront_allocations['ipv4']: }
+    https_ipv6 { $cloudfront_allocations['ipv6']: }
 
 
 
@@ -118,7 +104,12 @@ local server. This means that:
 If Puppet is run with --debug it exposes additional debug messages from the RIR
 functions, useful if debugging timeout issues, etc.
 
-    TODO: Put example here.
+    Debug: Scope(Class[main]): CloudFront: Downloading latest data... https://ip-ranges.amazonaws.com/ip-ranges.json
+    Debug: Scope(Class[main]): CloudFront: Writing to cache file at /tmp/.puppet_cloudfront_ip_ranges.yaml
+    Debug: Scope(Class[main]): CloudFront: Data successfully processed, returning results
+
+    Debug: Scope(Class[main]): CloudFront: Loading data from cachefile /tmp/.puppet_cloudfront_ip_ranges.yaml...
+    Debug: Scope(Class[main]): CloudFront: Data successfully processed, returning results
 
 
 # License

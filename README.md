@@ -78,6 +78,28 @@ through the CDN and blocking attacks directed at origin.
     https_ipv6 { $cloudfront_allocations['ipv6']: }
 
 
+### Usage with Apache
+
+When using Apache behind a CDN, generally you will want to use the
+`X-Forwarded-For` header in logs and also ACLs. However it can't be trusted if
+you aren't firewalling the server to the CDN only.
+
+The following example uses the Apache `remoteip` module and the
+`puppetlabs-apache` Puppet module to configure Apache to trust the headers from
+any CloudFront IP range.
+
+    # Trust X-Forwarded-For header from CloudFront. We use the
+    # jethrocarr-cloudfront Puppet module to download a list of all the IP
+    # addresses allocated to CloudFront regularly.
+    $cloudfront_allocations = cloudfront_ips()
+
+    class { 'apache::mod::remoteip':
+      header            => 'X-Forwarded-For',
+      proxy_ips         => ['127.0.0.1', '::1'],
+      trusted_proxy_ips => concat($cloudfront_allocations['ipv4'], $cloudfront_allocations['ipv6']),
+    }
+
+
 
 # Requirements
 

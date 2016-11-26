@@ -66,18 +66,29 @@ module Puppet::Parser::Functions
 
        if response.code.to_i == 200
 
+         # Parse the JSON blob downloaded from AWS and extract the Cloudfront
+         # IP ranges (v4 and v6).
+    
          data_downloaded_raw = JSON.parse(response.body)
-         puts data_downloaded_raw['prefixes']
 
          data_downloaded         = Hash.new
          data_downloaded["ipv4"] = Array.new
          data_downloaded["ipv6"] = Array.new
+         
+         data_downloaded_raw['prefixes'].each do |prefix|
+           if prefix['service'] == 'CLOUDFRONT'
+             data_downloaded['ipv4'].push(prefix['ip_prefix'])
+           end
+         end
 
-
-         # Parse the JSON blob downloaded from AWS and extract the Cloudfront
-         # IP ranges.
-         #
-         # TODO: Write me
+         data_downloaded_raw['ipv6_prefixes'].each do |prefix|
+           # Note that at time of authoring, AWS don't do IPv6 connectivity
+           # back to origin, however the code here is ready to support it for
+           # future proofing.
+           if prefix['service'] == 'CLOUDFRONT'
+             data_downloaded['ipv6'].push(prefix['ipv6_prefix'])
+           end
+         end
 
 
           # Write the new cache file
@@ -88,11 +99,10 @@ module Puppet::Parser::Functions
             FileUtils.touch cachefile
             File.chmod(0600, cachefile)
 
-# TODO: Enable Cache
-#            # Write out the processed data in YAML format
-#            File.open(cachefile, 'w' ) do |file|
-#              YAML.dump(data_downloaded, file)
-#            end
+            # Write out the processed data in YAML format
+            File.open(cachefile, 'w' ) do |file|
+              YAML.dump(data_downloaded, file)
+            end
 
           rescue StandardError => e
             raise Puppet::ParseError, "Unexpected error attempting to write cache file "+ cachefile +" exception "+ e.class.to_s

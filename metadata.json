@@ -1,0 +1,11 @@
+{
+  "name": "jethrocarr-cloudfront",
+  "version": "1.0.0",
+  "author": "jethrocarr",
+  "summary": "Provides a function that obtains a list of CloudFront IP ranges. Useful for firewalling to CDN ranges.",
+  "license": "Apache-2.0",
+  "source": "https://github.com/jethrocarr/puppet-cloudfront",
+  "project_page": "https://github.com/jethrocarr/puppet-cloudfront",
+  "issues_url": "https://github.com/jethrocarr/puppet-cloudfront/issues",
+  "dependencies": [ ]
+}
